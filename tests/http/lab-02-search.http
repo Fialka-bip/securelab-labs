@@ -1,5 +1,42 @@
 @baseUrl = http://localhost:5080
+
 ### Звичайний пошук
 GET {{baseUrl}}/api/incidents/search?q=навчальн
+
 ### Легітимний апостроф
 GET {{baseUrl}}/api/incidents/search?q=O%27Brien
+
+### Перевірка пошуку USB
+GET {{baseUrl}}/api/incidents/search?q=USB
+
+### T-01 Коректне створення
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+    "title": "Unique title LR02",
+    "description": "Штучний запис для перевірки контракту.",
+    "severity": "low",
+    "occurredAtUtc": "2026-09-01T13:00:00+03:00"
+}
+
+### T-02 Некоректний severity
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+    "title": "Severity probe LR02",
+    "description": "Штучний запис для перевірки enum.",
+    "severity": "7",
+    "occurredAtUtc": "2026-09-01T10:00:00Z"
+}
+
+### T-02 Відсутня дата
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+    "title": "Missing date LR02",
+    "description": "Штучний запис для перевірки обов'язкової дати.",
+    "severity": "Low"
+}
