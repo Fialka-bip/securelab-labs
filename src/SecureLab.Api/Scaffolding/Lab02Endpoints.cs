@@ -1,3 +1,4 @@
+
 using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
@@ -15,6 +16,7 @@ public static class Lab02Endpoints
             SecureLabDbContext db,
             CancellationToken ct) =>
         {
+            // Дозволені поля сортування
             var allowedSorts = new[]
             {
                 "createdAtUtc",
@@ -22,8 +24,9 @@ public static class Lab02Endpoints
                 "status"
             };
 
+            // Перевірка allowlist
             if (!string.IsNullOrEmpty(sortBy) &&
-                !allowedSorts.Contains(sortBy))
+                !allowedSorts.Contains(sortBy, StringComparer.Ordinal))
             {
                 return Results.ValidationProblem(
                     new Dictionary<string, string[]>
@@ -34,7 +37,7 @@ public static class Lab02Endpoints
 
             var query = db.Incidents.AsNoTracking();
 
-            // Пошук із екрануванням спеціальних символів LIKE
+            // Безпечний пошук із параметризацією та екрануванням LIKE
             if (!string.IsNullOrEmpty(q))
             {
                 var escaped = q
@@ -53,16 +56,18 @@ public static class Lab02Endpoints
             query = sortBy switch
             {
                 "severity" => query
-                    .OrderBy(x => x.Severity == IncidentSeverity.Critical ? 0 :
-                                  x.Severity == IncidentSeverity.High ? 1 :
-                                  x.Severity == IncidentSeverity.Medium ? 2 : 3)
+                    .OrderBy(x =>
+                        x.Severity == IncidentSeverity.Critical ? 0 :
+                        x.Severity == IncidentSeverity.High ? 1 :
+                        x.Severity == IncidentSeverity.Medium ? 2 : 3)
                     .ThenBy(x => x.Id),
 
                 "status" => query
-                    .OrderBy(x => x.Status == IncidentStatus.New ? 0 :
-                                  x.Status == IncidentStatus.Triaged ? 1 :
-                                  x.Status == IncidentStatus.InProgress ? 2 :
-                                  x.Status == IncidentStatus.Resolved ? 3 : 4)
+                    .OrderBy(x =>
+                        x.Status == IncidentStatus.New ? 0 :
+                        x.Status == IncidentStatus.Triaged ? 1 :
+                        x.Status == IncidentStatus.InProgress ? 2 :
+                        x.Status == IncidentStatus.Resolved ? 3 : 4)
                     .ThenBy(x => x.Id),
 
                 _ => query
@@ -125,6 +130,7 @@ public static class Lab02Endpoints
 
         // Перевірка Severity
         IncidentSeverity severity = IncidentSeverity.Low;
+
         var severityValid =
             Enum.TryParse<IncidentSeverity>(
                 request.Severity,
