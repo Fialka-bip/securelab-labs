@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 
@@ -90,15 +91,26 @@ public static class Lab02Endpoints
             }));
         });
 
-        // Створення інциденту з серверною валідацією
-        app.MapPost("/api/incidents", HandleCreateIncident);
+        // Створення інциденту лише для авторизованих користувачів
+        app.MapPost("/api/incidents", HandleCreateIncident)
+            .RequireAuthorization();
     }
 
     private static async Task<IResult> HandleCreateIncident(
         CreateIncidentRequest request,
+        HttpContext context,
         SecureLabDbContext db,
         CancellationToken ct)
     {
+        // Визначення власника за автентифікованим користувачем
+        var userId = context.User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(userId, out var authenticatedId))
+        {
+            return Results.Unauthorized();
+        }
+
         var now = DateTimeOffset.UtcNow;
         var errors = new Dictionary<string, string[]>();
 
@@ -194,11 +206,11 @@ public static class Lab02Endpoints
                 detail: "Активний інцидент із такою назвою вже існує.");
         }
 
-        // Створення сутності. Server-managed поля встановлюються сервером
+        // Створення інциденту з власником, визначеним сервером
         var incident = new Incident
         {
             Id = Guid.NewGuid(),
-            OwnerUserId = DbSeeder.AliceId,
+            OwnerUserId = authenticatedId,
             Title = title,
             Description = description,
             Severity = severity,
