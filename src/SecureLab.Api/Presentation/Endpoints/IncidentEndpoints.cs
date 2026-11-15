@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Application.Incidents;
+using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Presentation.Contracts;
 
@@ -20,6 +22,11 @@ public static class IncidentEndpoints
             .WithName("GetIncidentDetails")
             .Produces<IncidentDetailsResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // VULNERABLE (ЛР4, стан «до»): ресурс шукається лише за id.
+        group.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateIncident");
+        group.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteIncident");
+        group.MapPost("/{id:guid}/triage", TriageAsync).WithName("TriageIncident");
 
         group.MapGet("/severity-summary", GetSeveritySummaryAsync)
             .WithName("GetIncidentSeveritySummary")
@@ -63,6 +70,59 @@ public static class IncidentEndpoints
                 detail: $"Інцидент '{id}' не існує.",
                 statusCode: StatusCodes.Status404NotFound)
             : Results.Ok(incident);
+    }
+
+    private static async Task<IResult> UpdateAsync(
+        Guid id,
+        UpdateIncidentRequest request,
+        SecureLabDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var incident = await db.Incidents.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (incident is null) return Results.NotFound();
+
+        incident.Title = request.Title;
+        incident.Description = request.Description;
+        if (request.Status is not null
+            && Enum.TryParse<IncidentStatus>(request.Status, ignoreCase: true, out var newStatus))
+        {
+            incident.Status = newStatus;
+        }
+        if (request.OwnerUserId is not null)
+        {
+            incident.OwnerUserId = request.OwnerUserId.Value;
+        }
+        incident.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        Guid id,
+        SecureLabDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var incident = await db.Incidents.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (incident is null) return Results.NotFound();
+
+        db.Incidents.Remove(incident);
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> TriageAsync(
+        Guid id,
+        SecureLabDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var incident = await db.Incidents.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (incident is null) return Results.NotFound();
+
+        incident.Status = IncidentStatus.Triaged;
+        incident.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> GetSeveritySummaryAsync(
