@@ -9,13 +9,19 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 {
     private static readonly string[] SeverityOrder = ["Critical", "High", "Medium", "Low"];
 
+    // Query scoping: Analyst бачить усі інциденти, інші користувачі — лише власні.
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
         IncidentStatus? status,
+        Guid userId,
+        bool isAnalyst,
         CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incidents with status filter {Status}", status);
 
-        var query = dbContext.Incidents.AsNoTracking();
+        var query = dbContext.Incidents
+            .AsNoTracking()
+            .Where(incident => isAnalyst || incident.OwnerUserId == userId);
+
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
@@ -33,7 +39,19 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .ToListAsync(cancellationToken);
     }
 
-    public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
+    // Entity лише для рішення авторизації; назовні не серіалізується.
+    public Task<Incident?> FindForAuthorizationAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return dbContext.Incidents
+            .AsNoTracking()
+            .SingleOrDefaultAsync(incident => incident.Id == id, cancellationToken);
+    }
+
+    // Викликається лише після того, як handler дозволив доступ до інциденту.
+    public Task<IncidentDetailsResponse?> GetDetailsAsync(
+        Guid id,
+        bool includeInternalComments,
+        CancellationToken cancellationToken)
     {
         logger.LogInformation("Loading incident {IncidentId}", id);
 
@@ -50,7 +68,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
                 incident.CreatedAtUtc,
                 incident.Owner.DisplayName,
                 incident.Comments
-                    .Where(comment => !comment.IsInternal)
+                    .Where(comment => includeInternalComments || !comment.IsInternal)
                     .OrderBy(comment => comment.CreatedAtUtc)
                     .Select(comment => new IncidentCommentResponse(
                         comment.Id,
@@ -59,6 +77,16 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
                         comment.CreatedAtUtc))
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    // Коментар разом із батьківським інцидентом для рішення Read.
+    public Task<IncidentComment?> FindCommentAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return dbContext.Set<IncidentComment>()
+            .AsNoTracking()
+            .Include(comment => comment.Incident)
+            .Include(comment => comment.Author)
+            .SingleOrDefaultAsync(comment => comment.Id == id, cancellationToken);
     }
 
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
