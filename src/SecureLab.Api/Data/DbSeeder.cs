@@ -1,31 +1,32 @@
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data.Entities;
-
+ 
 namespace SecureLab.Api.Data;
-
+ 
 public static class DbSeeder
 {
     public const string ReporterRole = "Reporter";
     public const string AnalystRole = "Analyst";
     public const string AdministratorRole = "Administrator";
-
+ 
     public static readonly Guid AliceId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     public static readonly Guid BobId = Guid.Parse("10000000-0000-0000-0000-000000000002");
     public static readonly Guid MorganId = Guid.Parse("10000000-0000-0000-0000-000000000003");
     public static readonly Guid AdminId = Guid.Parse("10000000-0000-0000-0000-000000000004");
-
+ 
     public static readonly Guid AliceIncidentId = Guid.Parse("20000000-0000-0000-0000-000000000001");
     public static readonly Guid BobIncidentId = Guid.Parse("20000000-0000-0000-0000-000000000002");
     public static readonly Guid SafeTextIncidentId = Guid.Parse("20000000-0000-0000-0000-000000000003");
-
+ 
     private static readonly Guid ReporterRoleId =
         Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid AnalystRoleId =
         Guid.Parse("50000000-0000-0000-0000-000000000002");
     private static readonly Guid AdministratorRoleId =
         Guid.Parse("50000000-0000-0000-0000-000000000003");
-
+ 
     public static async Task SeedAsync(
         SecureLabDbContext dbContext,
         UserManager<ApplicationUser> userManager,
@@ -35,7 +36,7 @@ public static class DbSeeder
         await EnsureRoleAsync(roleManager, ReporterRoleId, ReporterRole);
         await EnsureRoleAsync(roleManager, AnalystRoleId, AnalystRole);
         await EnsureRoleAsync(roleManager, AdministratorRoleId, AdministratorRole);
-
+ 
         var password = configuration["SeedUsers:Password"];
         var userCount = await dbContext.Users.CountAsync(user =>
             user.Id == AliceId || user.Id == BobId || user.Id == MorganId || user.Id == AdminId);
@@ -44,7 +45,7 @@ public static class DbSeeder
             throw new InvalidOperationException(
                 "SeedUsers:Password має бути передано поза Git для створення локальних навчальних акаунтів.");
         }
-
+ 
         var alice = await EnsureUserAsync(
             userManager, AliceId, "alice", "alice@example.test", "Аліса Коваль", ReporterRole, password);
         var bob = await EnsureUserAsync(
@@ -53,12 +54,12 @@ public static class DbSeeder
             userManager, MorganId, "morgan", "morgan@example.test", "Морган Литвин", AnalystRole, password);
         _ = await EnsureUserAsync(
             userManager, AdminId, "admin", "admin@example.test", "Локальний адміністратор", AdministratorRole, password);
-
+ 
         if (await dbContext.Incidents.AnyAsync())
         {
             return;
         }
-
+ 
         var aliceIncident = new Incident
         {
             Id = AliceIncidentId,
@@ -95,8 +96,16 @@ public static class DbSeeder
             CreatedAtUtc = new DateTimeOffset(2026, 8, 3, 8, 0, 0, TimeSpan.Zero),
             UpdatedAtUtc = new DateTimeOffset(2026, 8, 3, 8, 0, 0, TimeSpan.Zero)
         };
-
+ 
         dbContext.Incidents.AddRange(aliceIncident, bobIncident, safeTextIncident);
+ 
+        // Lab 5: канонічний нешкідливий marker для другого sink (коментарі).
+        // Лише встановлює data-lab05-marker="executed" на прихованому #lab05-marker-target.
+        const string Lab05Marker =
+            "<img src=x onerror=\""
+            + "document.querySelector('#lab05-marker-target')"
+            + ".setAttribute('data-lab05-marker','executed')\">";
+ 
         dbContext.IncidentComments.AddRange(
             new IncidentComment
             {
@@ -115,6 +124,15 @@ public static class DbSeeder
                 Text = "Розпочато перевірку журналу автентифікації.",
                 IsInternal = false,
                 CreatedAtUtc = new DateTimeOffset(2026, 8, 2, 14, 40, 0, TimeSpan.Zero)
+            },
+            new IncidentComment
+            {
+                Id = Guid.Parse("30000000-0000-0000-0000-000000000005"),
+                Incident = aliceIncident,
+                Author = morgan,
+                Text = Lab05Marker,
+                IsInternal = false,
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 9, 35, 0, TimeSpan.Zero)
             });
         dbContext.IncidentStatusHistory.Add(
             new IncidentStatusHistory
@@ -127,10 +145,10 @@ public static class DbSeeder
                 Note = "Первинну оцінку завершено.",
                 CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 10, 0, 0, TimeSpan.Zero)
             });
-
+ 
         await dbContext.SaveChangesAsync();
     }
-
+ 
     private static async Task EnsureRoleAsync(
         RoleManager<IdentityRole<Guid>> roleManager,
         Guid id,
@@ -140,7 +158,7 @@ public static class DbSeeder
         {
             return;
         }
-
+ 
         var result = await roleManager.CreateAsync(new IdentityRole<Guid>
         {
             Id = id,
@@ -148,7 +166,7 @@ public static class DbSeeder
         });
         EnsureSucceeded(result, $"create role {name}");
     }
-
+ 
     private static async Task<ApplicationUser> EnsureUserAsync(
         UserManager<ApplicationUser> userManager,
         Guid id,
@@ -171,7 +189,7 @@ public static class DbSeeder
                 EnsureSucceeded(await userManager.AddToRoleAsync(existing, role), "assign study role");
             return existing;
         }
-
+ 
         var user = new ApplicationUser
         {
             Id = id,
@@ -187,15 +205,16 @@ public static class DbSeeder
         EnsureSucceeded(await userManager.AddToRoleAsync(user, role), $"assign role {role}");
         return user;
     }
-
+ 
     private static void EnsureSucceeded(IdentityResult result, string operation)
     {
         if (result.Succeeded)
         {
             return;
         }
-
+ 
         var codes = string.Join(", ", result.Errors.Select(error => error.Code));
         throw new InvalidOperationException($"Identity seed operation '{operation}' failed: {codes}.");
     }
 }
+ 
